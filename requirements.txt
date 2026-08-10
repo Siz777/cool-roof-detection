@@ -1,0 +1,7 @@
+ultralytics==8.4.117
+roboflow
+python-dotenv
+scikit-learn
+matplotlib
+pyyaml
+tqdm

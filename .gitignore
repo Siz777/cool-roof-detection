@@ -1,0 +1,25 @@
+# 1. 비밀·머신별 설정
+.env
+
+# 2. 노트북이 생성하는 산출물 (재실행으로 재생성)
+runs/
+datasets/
+roof-1/
+cool_roof_images/
+cool_roof_labels/
+tld.yaml
+data/
+
+# 3. 대용량·재배포 금지 (가중치, 원본 데이터셋, 캐시)
+*.pt
+*.zip
+*.cache
+
+# 4. 파이썬·주피터
+__pycache__/
+.ipynb_checkpoints/
+
+# 5. OS·에디터
+Thumbs.db
+desktop.ini
+.vscode/
