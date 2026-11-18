@@ -9,6 +9,8 @@ cool_roof_images/
 cool_roof_labels/
 tld.yaml
 data/
+# 개선 실험 학습 산출물 (기록 CSV·검증셋 목록은 커밋 대상)
+experiments/runs/
 
 # 3. 대용량·재배포 금지 (가중치, 원본 데이터셋, 캐시)
 *.pt

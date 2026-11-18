@@ -38,7 +38,7 @@
 
 <!-- 학습 곡선 -->
 ![학습 곡선](results/results.png)
-*10 epochs 시점 대비 20 epochs에서 소수 클래스(cool roof) 성능이 지속 상승 — 7. Error Analysis 참고*
+*10 epochs 시점 대비 20 epochs에서 소수 클래스(cool roof) 성능이 지속 상승 — 6. Error Analysis 참고*
 
 ---
 
@@ -133,7 +133,61 @@ YOLOv8-OBB(Oriented Bounding Box)로 라벨 체계를 전환하는 것이 다음
 **4. 단일 hold-out 검증의 분산 미측정** — 1회 분할 성능은 분할 운에 따라
 변동될 수 있어, k-fold 교차검증으로 성능 분산을 함께 보고하고자 합니다.
 
-## 8. How to Run
+## 8. Improvement Experiments (진행 중)
+
+6장 Error Analysis의 가설(학습량 부족 · 라벨 품질 · 클래스 불균형 · 회전 객체)을
+단계별 통제 실험으로 검증해 **mAP@50-95를 어느 단계에서 얼마나 개선했는지** 분리 측정합니다.
+
+### 8.1 로드맵
+
+| 단계 | 실험 | 변경 내용 | 주 지표 |
+|---|---|---|---|
+| 0 | B0 | 파이프라인 검증(클래스 매핑·정합성·누수) + 검증셋 고정, YOLOv8n · 640 · 최대 100 epoch · seed 3개 | 기준 성능, seed 간 σ |
+| 1 | E1a / E1b | 라벨 검수: 기존 모델의 수정 검증셋 재평가(측정 보정) / 수정 데이터 재학습(학습 효과) | Δ mAP75, Δ mAP50-95 |
+| 2 | E2 | 입력 해상도 640 / 800 / 1024 | Δ mAP50-95 |
+| 3 | E3 | YOLOv8n → s (가능하면 해상도와 2×2), 추론 속도 병기 | Δ mAP50-95, ms/img |
+| 4 | E4a / b / c | Oversampling → +증강 → +Copy-Paste (train에만 적용) | **Cool Roof** mAP50-95 |
+| 5 | E5 | OBB 전환 — AABB 변환 평가 + 중복 검출률 (별도 기준) | 공통 지표 |
+| 6 | F | 최종 모델: 외부 15장(지역·도메인 분석, 오류 유형) + Group K-fold | 평균 ± 표준편차 |
+
+### 8.2 실험 설계 원칙
+
+- **고정 검증셋** — 검증 이미지 목록(`val_list.txt`)은 B0에서 고정하고, 라벨은 내용
+  해시로 버전 관리합니다(`val_v1` 원본 → `val_v2` 검수본). 모든 결과에 검증 라벨 버전을 함께 기록합니다.
+- **반복 측정과 판정 기준** — 검증셋이 작아(71장, cool roof 78개) seed만 바꿔도 성능이 흔들립니다.
+  B0를 seed 3개로 반복해 σ를 구하고, **|Δ mAP50-95| > 2σ** 인 변경만 개선 후보로 판정합니다.
+- **누적 vs 독립 기여도** — 각 단계는 직전 채택 설정 위에 누적됩니다(E2 = E1 + 해상도 …).
+  따라서 단계별 Δ는 *그 시점 설정에서 추가한 변경의 한계 효과*이며, 변경 하나의 독립 기여도는
+  최종 설정에서 하나씩 빼 보는 **leave-one-out**으로 따로 보고합니다. 두 값의 차이는 요인 간 상호작용을 뜻합니다.
+- **OBB는 별도 기준** — 회전 IoU와 축 정렬 IoU는 같은 예측에서도 값이 달라 OBB mAP를 AABB mAP와
+  직접 비교하지 않습니다. OBB 예측을 외접 AABB로 변환한 평가와 중복 검출률로 비교합니다.
+
+### 8.3 결과 (seed별 원자료: `experiments/experiments.csv`)
+
+| 실험 | 기준 | 변경 내용 | 검증 라벨 | seed | mAP50 | mAP75 | mAP50-95 | Cool Roof mAP50-95 | Δ mAP50-95 | 판정 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| B0 | - | 기존 파이프라인 재학습 (최대 100 epoch) | val_v1 | 3 | - | - | - | - | - | 기준선 |
+| E1a | B0 | 기존 모델 → 수정 검증셋 재평가 | val_v2 | 3 | - | - | - | - | - | - |
+| E1b | B0 | 라벨 수정 데이터로 재학습 | val_v2 | 3 | - | - | - | - | - | - |
+| E2 | E1b | 해상도 변경 | val_v2 | - | - | - | - | - | - | - |
+| E3 | E2 | 모델 크기 변경 | val_v2 | - | - | - | - | - | - | - |
+| E4 | E3 | 클래스 불균형 대응 | val_v2 | - | - | - | - | - | - | - |
+| E5 | 별도 | OBB 전환 (AABB 변환 평가 · 중복 검출률) | val_v2 | - | 별도 기준 | 별도 기준 | 별도 기준 | 별도 기준 | - | - |
+
+*표는 노트북 0단계-5 셀의 `to_markdown(summarize(...))` 출력으로 갱신합니다. 값은 seed 평균 ± 표준편차.*
+
+### 8.4 실행 방법
+
+노트북의 **0단계** 섹션(셀 `[0단계-1]`~`[0단계-5]`)을 순서대로 실행합니다.
+실험 로직은 `src/`에 분리되어 있어 이후 단계도 `run_experiment(...)` 한 줄로 같은 형식의 기록이 누적됩니다.
+Colab에서는 기록과 가중치를 Google Drive에 저장하므로, 런타임이 끊겨도 같은 셀을 다시 실행하면
+완료된 seed는 건너뛰고 중단된 seed는 이어서 학습합니다.
+
+```bash
+python -m pytest tests -q   # 데이터 검사·버전 관리·기록 로직 단위 테스트 (GPU·데이터 불필요)
+```
+
+## 9. How to Run
 
 ```bash
 git clone https://github.com/Siz777/cool-roof-detection.git
@@ -153,7 +207,7 @@ pip install -r requirements.txt
 > 참고: 원 실험은 Ultralytics 8.1.47, 본 저장소 검증은 8.4.117에서
 > 수행되었습니다. 버전 간 학습 결과는 소수점 단위에서 다를 수 있습니다.
 
-## 9. Repository Structure
+## 10. Repository Structure
 
 ```
 cool-roof-detection/
@@ -162,6 +216,16 @@ cool-roof-detection/
 ├── .env.example
 ├── notebooks/
 │   └── train_pipeline.ipynb      # 전 과정 파이프라인 (출력 포함)
+├── src/                          # 개선 실험 유틸리티 (8장)
+│   ├── data_check.py             # 클래스 ID 매핑·이미지–라벨 정합성 검사
+│   ├── dedup.py                  # 스플릿 간 근접 중복(누수) 탐지
+│   ├── splits.py                 # 검증셋 목록 고정·라벨 버전 관리
+│   └── experiment.py             # seed 반복 학습·평가·기록·요약
+├── tests/
+│   └── test_stage0.py
+├── experiments/                  # 실행 시 생성 — 결과 기록 (runs/는 gitignore)
+│   ├── experiments.csv
+│   └── splits/                   # val_list.txt, label_versions.json
 └── results/
     ├── metrics.md                # 최종 성능 표
     ├── results.png               # 학습 곡선
